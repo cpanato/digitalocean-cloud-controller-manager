@@ -19,12 +19,15 @@ package do
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"reflect"
 	"strconv"
 	"testing"
+
+	"github.com/mitchellh/copystructure"
 
 	"github.com/digitalocean/godo"
 )
@@ -37,7 +40,7 @@ func newFakeClient(fakeDroplet *fakeDropletService, fakeLB *fakeLBService, fakeC
 	return &godo.Client{
 		Certificates:  fakeCert,
 		Droplets:      fakeDroplet,
-		LoadBalancers: fakeLB,
+		LoadBalancers: lbService,
 	}
 }
 
@@ -164,4 +167,12 @@ func TestAllLoadBalancerList(t *testing.T) {
 	if want, got := expectedLBs, lbs; !reflect.DeepEqual(want, got) {
 		t.Errorf("incorrect lbs\nwant: %#v\n got: %#v", want, got)
 	}
+}
+
+func mustCopy(in interface{}) interface{} {
+	out, err := copystructure.Copy(in)
+	if err != nil {
+		panic(fmt.Sprintf("failed to copy: %s", err))
+	}
+	return out
 }

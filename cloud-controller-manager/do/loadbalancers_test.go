@@ -39,67 +39,6 @@ import (
 
 var _ cloudprovider.LoadBalancer = new(loadBalancers)
 
-type fakeLoadBalancerService struct {
-	*fakeService
-	lbs []godo.LoadBalancer
-}
-
-func newFakeLoadBalancerService(lbs ...godo.LoadBalancer) *fakeLoadBalancerService {
-	return newFakeLoadBalancerServiceWithFailure(-1, nil, lbs...)
-}
-
-func newFakeLoadBalancerServiceWithFailure(failOnReq int, failErr error, lbs ...godo.LoadBalancer) *fakeLoadBalancerService {
-	return &fakeLoadBalancerService{
-		fakeService: newFakeService(failOnReq, failErr),
-		lbs:         lbs,
-	}
-}
-
-func (f *fakeLoadBalancerService) Get(ctx context.Context, lbID string) (*godo.LoadBalancer, *godo.Response, error) {
-	if f.shouldFail() {
-		return nil, newFakeNotOKResponse(), f.failError
-	}
-
-	for _, lb := range f.lbs {
-		if lb.ID == lbID {
-			return &lb, newFakeOKResponse(), nil
-		}
-	}
-
-	return nil, newFakeResponse(http.StatusNotFound), errors.New("load-balancer not found")
-}
-
-// func (f *fakeLoadBalancerService) List(ctx context.Context, listOpts *godo.ListOptions) ([]godo.LoadBalancer, *godo.Response, error) {
-// 	return f.listFn(ctx, listOpts)
-// }
-
-// func (f *fakeLoadBalancerService) Create(ctx context.Context, lbr *godo.LoadBalancerRequest) (*godo.LoadBalancer, *godo.Response, error) {
-// 	return f.createFn(ctx, lbr)
-// }
-
-// func (f *fakeLoadBalancerService) Update(ctx context.Context, lbID string, lbr *godo.LoadBalancerRequest) (*godo.LoadBalancer, *godo.Response, error) {
-// 	return f.updateFn(ctx, lbID, lbr)
-// }
-
-// func (f *fakeLoadBalancerService) Delete(ctx context.Context, lbID string) (*godo.Response, error) {
-// 	return f.deleteFn(ctx, lbID)
-// }
-
-// func (f *fakeLoadBalancerService) AddDroplets(ctx context.Context, lbID string, dropletIDs ...int) (*godo.Response, error) {
-// 	return f.addDropletsFn(ctx, lbID, dropletIDs...)
-// }
-
-// func (f *fakeLoadBalancerService) RemoveDroplets(ctx context.Context, lbID string, dropletIDs ...int) (*godo.Response, error) {
-// 	return f.removeDropletsFn(ctx, lbID, dropletIDs...)
-// }
-// func (f *fakeLoadBalancerService) AddForwardingRules(ctx context.Context, lbID string, rules ...godo.ForwardingRule) (*godo.Response, error) {
-// 	return f.addForwardingRulesFn(ctx, lbID, rules...)
-// }
-
-// func (f *fakeLoadBalancerService) RemoveForwardingRules(ctx context.Context, lbID string, rules ...godo.ForwardingRule) (*godo.Response, error) {
-// 	return f.removeForwardingRulesFn(ctx, lbID, rules...)
-// }
-
 type fakeLBService struct {
 	store                   map[string]*godo.LoadBalancer
 	getFn                   func(context.Context, string) (*godo.LoadBalancer, *godo.Response, error)
@@ -3757,8 +3696,7 @@ func Test_nodeToDropletIDs(t *testing.T) {
 func Test_GetLoadBalancer(t *testing.T) {
 	testcases := []struct {
 		name     string
-		getFn    func(context.Context, string) (*godo.LoadBalancer, *godo.Response, error)
-		listFn   func(context.Context, *godo.ListOptions) ([]godo.LoadBalancer, *godo.Response, error)
+		fakeSvc  *fakeLoadBalancerService
 		service  *v1.Service
 		lbStatus *v1.LoadBalancerStatus
 		exists   bool
@@ -3926,10 +3864,8 @@ func Test_GetLoadBalancer(t *testing.T) {
 			err:    nil,
 		},
 		{
-			name: "loadbalancer not found",
-			listFn: func(context.Context, *godo.ListOptions) ([]godo.LoadBalancer, *godo.Response, error) {
-				return []godo.LoadBalancer{}, newFakeOKResponse(), nil
-			},
+			name:    "loadbalancer not found",
+			fakeSvc: newFakeLoadBalancerService(),
 			service: &v1.Service{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test",
@@ -3957,10 +3893,7 @@ func Test_GetLoadBalancer(t *testing.T) {
 
 	for _, test := range testcases {
 		t.Run(test.name, func(t *testing.T) {
-			fakeLB := &fakeLBService{
-				getFn:  test.getFn,
-				listFn: test.listFn,
-			}
+			fakeLB := test.fakeSvc
 			fakeClient := newFakeLBClient(fakeLB)
 			fakeResources := newResources("", "", publicAccessFirewall{}, fakeClient)
 			fakeResources.kclient = fake.NewSimpleClientset()
@@ -3994,6 +3927,8 @@ func Test_GetLoadBalancer(t *testing.T) {
 				t.Logf("expected: %v", test.err)
 				t.Logf("actual: %v", err)
 			}
+
+			fakeLB.assertCounts(t)
 
 			if test.exists {
 				svc, err := fakeResources.kclient.CoreV1().Services(test.service.Namespace).Get(context.Background(), test.service.Name, metav1.GetOptions{})
