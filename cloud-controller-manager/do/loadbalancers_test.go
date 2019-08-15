@@ -122,6 +122,10 @@ func newFakeLBClient(fakeLB *fakeLBService) *godo.Client {
 }
 
 func createLB() *godo.LoadBalancer {
+	return createLBWithID("")
+}
+
+func createLBWithID(id string) *godo.LoadBalancer {
 	return &godo.LoadBalancer{
 		ID:     "load-balancer-id",
 		Name:   "afoobar123",
@@ -4041,7 +4045,7 @@ func Test_EnsureLoadBalancer(t *testing.T) {
 				},
 			},
 			fakeLB: newFakeLoadBalancerService(
-				*createLB(),
+				*createLBWithID("load-balancer-id"),
 			).expectLists(0).expectCreates(0),
 			service: &v1.Service{
 				ObjectMeta: metav1.ObjectMeta{
@@ -4105,7 +4109,10 @@ func Test_EnsureLoadBalancer(t *testing.T) {
 					Name: "node-3",
 				},
 			},
-			fakeLB: newFakeLoadBalancerService().expectGets(0).expectUpdates(0),
+			fakeLB: newFakeLoadBalancerService().
+				expectGets(0).
+				expectUpdates(0).
+				setCreatedActiveOn(1),
 			service: &v1.Service{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test",
@@ -4226,22 +4233,15 @@ func Test_EnsureLoadBalancer(t *testing.T) {
 					},
 				},
 			},
-			err: nil,
+			skipLBComp: true,
+			err:        nil,
 		},
 		{
 			name:     "failed to ensure existing load-balancer, state is non-active",
 			droplets: []godo.Droplet{},
-			listFn: func(context.Context, *godo.ListOptions) ([]godo.LoadBalancer, *godo.Response, error) {
-				return []godo.LoadBalancer{*createLB()}, newFakeOKResponse(), nil
-			},
-			createFn: func(context.Context, *godo.LoadBalancerRequest) (*godo.LoadBalancer, *godo.Response, error) {
-				return nil, newFakeNotOKResponse(), errors.New("create should not have been invoked")
-			},
-			updateFn: func(ctx context.Context, lbID string, lbr *godo.LoadBalancerRequest) (*godo.LoadBalancer, *godo.Response, error) {
-				lb := createLB()
-				lb.Status = lbStatusNew
-				return lb, newFakeOKResponse(), nil
-			},
+			fakeLB: newFakeLoadBalancerService(
+				*createLB(),
+			).setCreatedActiveOn(-1),
 			service: &v1.Service{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test",
@@ -4370,9 +4370,7 @@ func Test_EnsureLoadBalancer(t *testing.T) {
 				t.Logf("actual: %v", err)
 			}
 
-			if test.fakeLB != nil {
-				test.fakeLB.assertCounts(t)
-			}
+			test.fakeLB.assertCounts(t)
 
 			if test.err == nil {
 				svc, err := fakeResources.kclient.CoreV1().Services(test.service.Namespace).Get(context.Background(), test.service.Name, metav1.GetOptions{})
