@@ -3969,67 +3969,13 @@ func Test_EnsureLoadBalancer(t *testing.T) {
 			fakeLB: newFakeLoadBalancerService(
 				*createLB(),
 			).expectGets(0).expectCreates(0),
-			service: &v1.Service{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test",
-					UID:  "foobar123",
-					Annotations: map[string]string{
-						annDOProtocol: "http",
-					},
-				},
-				Spec: v1.ServiceSpec{
-					Ports: []v1.ServicePort{
-						{
-							Name:     "test",
-							Protocol: "TCP",
-							Port:     int32(80),
-							NodePort: int32(30000),
-						},
-					},
-				},
-			},
-			lbStatus: &v1.LoadBalancerStatus{
-				Ingress: []v1.LoadBalancerIngress{
-					{
-						IP: "10.0.0.1",
-					},
-				},
-			},
-			err: nil,
 		},
 		{
 			name: "successfully ensured loadbalancer by ID, already exists",
 			fakeLB: newFakeLoadBalancerService(
 				*createLBWithID("load-balancer-id"),
 			).expectLists(0).expectCreates(0),
-			service: &v1.Service{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test",
-					UID:  "foobar123",
-					Annotations: map[string]string{
-						annDOProtocol:        "http",
-						annoDOLoadBalancerID: "load-balancer-id",
-					},
-				},
-				Spec: v1.ServiceSpec{
-					Ports: []v1.ServicePort{
-						{
-							Name:     "test",
-							Protocol: "TCP",
-							Port:     int32(80),
-							NodePort: int32(30000),
-						},
-					},
-				},
-			},
-			lbStatus: &v1.LoadBalancerStatus{
-				Ingress: []v1.LoadBalancerIngress{
-					{
-						IP: "10.0.0.1",
-					},
-				},
-			},
-			err: nil,
+			svcLoadBalancerID: "load-balancer-id",
 		},
 		{
 			name: "successfully ensured loadbalancer by name that didn't exist",
@@ -4037,33 +3983,6 @@ func Test_EnsureLoadBalancer(t *testing.T) {
 				expectGets(0).
 				expectUpdates(0).
 				setCreatedActiveOn(1),
-			service: &v1.Service{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test",
-					UID:  "foobar123",
-					Annotations: map[string]string{
-						annDOProtocol: "http",
-					},
-				},
-				Spec: v1.ServiceSpec{
-					Ports: []v1.ServicePort{
-						{
-							Name:     "test",
-							Protocol: "TCP",
-							Port:     int32(80),
-							NodePort: int32(30000),
-						},
-					},
-				},
-			},
-			lbStatus: &v1.LoadBalancerStatus{
-				Ingress: []v1.LoadBalancerIngress{
-					{
-						IP: "10.0.0.1",
-					},
-				},
-			},
-			err: nil,
 		},
 		{
 			name: "successfully ensured loadbalancer by ID that didn't exist",
@@ -4148,12 +4067,23 @@ func Test_EnsureLoadBalancer(t *testing.T) {
 			fakeLB: newFakeLoadBalancerService(
 				*createLB(),
 			).setCreatedActiveOn(-1),
-			service: &v1.Service{
+			err: fmt.Errorf("load-balancer is not yet active (current status: %s)", lbStatusNew),
+		},
+	}
+
+	for _, test := range testcases {
+		t.Run(test.name, func(t *testing.T) {
+			fakeClient := newFakeLBClient(test.fakeLB)
+			fakeResources := newResources("", "", fakeClient)
+			fakeResources.kclient = fake.NewSimpleClientset()
+
+			service := &v1.Service{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test",
 					UID:  "foobar123",
 					Annotations: map[string]string{
-						annDOProtocol: "http",
+						annDOProtocol:        "http",
+						annoDOLoadBalancerID: test.svcLoadBalancerID,
 					},
 				},
 				Spec: v1.ServiceSpec{
@@ -4273,17 +4203,25 @@ func Test_EnsureLoadBalancer(t *testing.T) {
 			}
 
 			// clusterName param in EnsureLoadBalancer currently not used
-			lbStatus, err := lb.EnsureLoadBalancer(context.TODO(), "test", test.service, nodes)
-			if !reflect.DeepEqual(lbStatus, test.lbStatus) {
-				t.Error("unexpected LB status")
-				t.Logf("expected: %v", test.lbStatus)
-				t.Logf("actual: %v", lbStatus)
-			}
+			lbStatus, err := lb.EnsureLoadBalancer(context.TODO(), "test", service, nodes)
 
 			if !reflect.DeepEqual(err, test.err) {
-				t.Error("unexpected error")
-				t.Logf("expected: %v", test.err)
-				t.Logf("actual: %v", err)
+				t.Fatalf("got error %q, want %q", err, test.err)
+			}
+
+			var wantLBStatus *v1.LoadBalancerStatus
+			if err == nil {
+				wantLBStatus = &v1.LoadBalancerStatus{
+					Ingress: []v1.LoadBalancerIngress{
+						{
+							IP: lbIngressIP,
+						},
+					},
+				}
+			}
+
+			if !reflect.DeepEqual(lbStatus, wantLBStatus) {
+				t.Errorf("got LB status\n%v\nwant\n%v", lbStatus, wantLBStatus)
 			}
 
 			test.fakeLB.assertCounts(t)
