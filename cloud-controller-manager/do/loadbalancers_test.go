@@ -4266,7 +4266,8 @@ func Test_EnsureLoadBalancerDeleted(t *testing.T) {
 	}{
 		{
 			name: "retrieval failed",
-			fakeLBSvc: newFakeLoadBalancerServiceWithFailure(0, errors.New("API failed")).
+			fakeLBSvc: newFakeLoadBalancerService().
+				withAction(newFailureAction(0, errors.New("API failed"))).
 				expectDeletes(0),
 			service: &v1.Service{
 				ObjectMeta: metav1.ObjectMeta{
