@@ -3942,8 +3942,6 @@ func Test_GetLoadBalancer(t *testing.T) {
 				t.Logf("actual: %v", err)
 			}
 
-			test.fakeLB.assertCalls(t)
-
 			if test.exists {
 				svc, err := fakeResources.kclient.CoreV1().Services(test.service.Namespace).Get(context.Background(), test.service.Name, metav1.GetOptions{})
 				if err != nil {
@@ -3978,20 +3976,19 @@ func Test_EnsureLoadBalancer(t *testing.T) {
 			name: "successfully ensured loadbalancer by name, already exists",
 			fakeLBSvc: newFakeLoadBalancerService(
 				*createLB(),
-			).expectGets(0).expectCreates(0),
+			).withAction(newUnexpectedCallFailureAction(methodKindGet, methodKindCreate)),
 		},
 		{
 			name: "successfully ensured loadbalancer by ID, already exists",
 			fakeLBSvc: newFakeLoadBalancerService(
 				*createLBWithOpts(&lbOpts{id: "load-balancer-id"}),
-			).expectLists(0).expectCreates(0),
+			).withAction(newUnexpectedCallFailureAction(methodKindList, methodKindCreate)),
 			svcLoadBalancerID: "load-balancer-id",
 		},
 		{
 			name: "successfully ensured loadbalancer by name that didn't exist",
 			fakeLBSvc: newFakeLoadBalancerService().
-				expectGets(0).
-				expectUpdates(0).
+				withAction(newUnexpectedCallFailureAction(methodKindGet, methodKindUpdate)).
 				setCreatedActiveOn(1),
 		},
 		{
@@ -4267,8 +4264,8 @@ func Test_EnsureLoadBalancerDeleted(t *testing.T) {
 		{
 			name: "retrieval failed",
 			fakeLBSvc: newFakeLoadBalancerService().
-				withAction(newFailureAction(0, errors.New("API failed"))).
-				expectDeletes(0),
+				withAction(newUnexpectedCallFailureAction(methodKindDelete)).
+				withAction(newFailureAction(0, errors.New("API failed"))),
 			service: &v1.Service{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test",
@@ -4278,8 +4275,9 @@ func Test_EnsureLoadBalancerDeleted(t *testing.T) {
 			err: errors.New("API failed"),
 		},
 		{
-			name:      "load-balancer resource not found",
-			fakeLBSvc: newFakeLoadBalancerService().expectDeletes(0),
+			name: "load-balancer resource not found",
+			fakeLBSvc: newFakeLoadBalancerService().
+				withAction(newUnexpectedCallFailureAction(methodKindDelete)),
 			service: &v1.Service{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test",
