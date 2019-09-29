@@ -4255,7 +4255,7 @@ func Test_EnsureLoadBalancer(t *testing.T) {
 }
 
 func Test_EnsureLoadBalancerDeleted(t *testing.T) {
-	lbName := "afoobar123"
+	// lbName := "afoobar123"
 	tests := []struct {
 		name      string
 		fakeLBSvc *fakeLoadBalancerService
