@@ -4255,8 +4255,6 @@ func Test_EnsureLoadBalancerDeleted(t *testing.T) {
 	tests := []struct {
 		name      string
 		fakeLBSvc *fakeLoadBalancerService
-		listFn    func(context.Context, *godo.ListOptions) ([]godo.LoadBalancer, *godo.Response, error)
-		deleteFn  func(ctx context.Context, lbID string) (*godo.Response, error)
 		service   *v1.Service
 		err       error
 	}{
