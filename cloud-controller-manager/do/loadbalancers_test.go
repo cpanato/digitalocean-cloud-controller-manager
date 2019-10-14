@@ -3988,8 +3988,7 @@ func Test_EnsureLoadBalancer(t *testing.T) {
 		{
 			name: "successfully ensured loadbalancer by name that didn't exist",
 			fakeLBSvc: newFakeLoadBalancerService().
-				appendAction(newUnexpectedCallFailureAction(methodKindGet, methodKindUpdate)).
-				setCreatedActiveOn(1),
+				appendAction(newUnexpectedCallFailureAction(methodKindGet, methodKindUpdate)),
 		},
 		{
 			name: "successfully ensured loadbalancer by ID that didn't exist",
@@ -4073,7 +4072,7 @@ func Test_EnsureLoadBalancer(t *testing.T) {
 			name: "failed to ensure existing load-balancer, state is non-active",
 			fakeLBSvc: newFakeLoadBalancerService(
 				*createLBWithOpts(&lbOpts{status: lbStatusNew}),
-			).setCreatedActiveOn(-1),
+			),
 			err: fmt.Errorf("load-balancer is not yet active (current status: %s)", lbStatusNew),
 		},
 	}
