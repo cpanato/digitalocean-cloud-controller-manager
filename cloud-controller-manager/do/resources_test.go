@@ -104,14 +104,9 @@ func (sb *serviceBuilder) setAnnotation(svc *v1.Service, key, value string) {
 }
 
 func lbName(idx int) string {
-<<<<<<< HEAD
 	svc := newSvcBuilder(idx).build()
 
 	return getLoadBalancerName(svc)
-=======
-	svc := newSvcBuilderWithIdx(idx).build()
-	return getDefaultLoadBalancerName(svc)
->>>>>>> 749fe838... WIP
 }
 
 func createLBSvc(idx int) *corev1.Service {
