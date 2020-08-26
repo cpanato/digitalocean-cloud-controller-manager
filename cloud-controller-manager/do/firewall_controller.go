@@ -46,7 +46,7 @@ const (
 
 	// How long to wait before retrying the processing of a firewall change.
 	minRetryDelay = 5 * time.Second
-	maxRetryDelay = 300 * time.Second
+	maxRetryDelay = 90 * time.Second
 )
 
 var (
