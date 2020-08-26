@@ -28,11 +28,13 @@ import (
 	"github.com/google/go-cmp/cmp"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 )
 
@@ -41,6 +43,10 @@ const (
 	serviceSyncPeriod = 30 * time.Second
 	// Frequency at which the firewall controller runs.
 	firewallReconcileFrequency = 5 * time.Minute
+
+	// How long to wait before retrying the processing of a firewall change.
+	minRetryDelay = 5 * time.Second
+	maxRetryDelay = 300 * time.Second
 )
 
 var (
@@ -90,6 +96,8 @@ type FirewallController struct {
 	workerFirewallName string
 	serviceLister      corelisters.ServiceLister
 	fwManager          firewallManager
+	// nodeport services that need to be synced
+	queue workqueue.RateLimitingInterface
 }
 
 // NewFirewallController returns a new firewall controller to reconcile public access firewall state.
@@ -108,30 +116,42 @@ func NewFirewallController(
 		workerFirewallTags: workerFirewallTags,
 		workerFirewallName: workerFirewallName,
 		fwManager:          fwManager,
+		queue:              workqueue.NewNamedRateLimitingQueue(workqueue.NewItemExponentialFailureRateLimiter(minRetryDelay, maxRetryDelay), "service"),
 	}
 
 	serviceInformer.Informer().AddEventHandlerWithResyncPeriod(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(cur interface{}) {
-				ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-				defer cancel()
-				err := fc.ensureReconciledFirewall(ctx)
+				var err error
+				svc, ok := cur.(*v1.Service)
+				if ok && wantsNodePort(svc) {
+					fc.enqueueService(cur)
+					err = fc.ensureReconciledFirewall(context.Background())
+				}
+
 				if err != nil {
 					klog.Errorf("failed to reconcile worker firewall after adding a resource object: %s", err)
 				}
 			},
 			UpdateFunc: func(old, cur interface{}) {
-				ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-				defer cancel()
-				err := fc.ensureReconciledFirewall(ctx)
+				var err error
+				oldSvc, ok1 := old.(*v1.Service)
+				curSvc, ok2 := cur.(*v1.Service)
+				if ok1 && ok2 && (needsUpdate(oldSvc, curSvc) || wantsNodePort(curSvc)) {
+					fc.enqueueService(cur)
+					err = fc.ensureReconciledFirewall(context.Background())
+				}
 				if err != nil {
 					klog.Errorf("failed to reconcile worker firewall after updating a resource object: %s", err)
 				}
 			},
-			DeleteFunc: func(obj interface{}) {
-				ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-				defer cancel()
-				err := fc.ensureReconciledFirewall(ctx)
+			DeleteFunc: func(cur interface{}) {
+				var err error
+				svc, ok := cur.(*v1.Service)
+				if ok && wantsNodePort(svc) {
+					fc.enqueueService(cur)
+					err = fc.ensureReconciledFirewall(context.Background())
+				}
 				if err != nil {
 					klog.Errorf("failed to reconcile worker firewall after deleting a resource object: %s", err)
 				}
@@ -142,6 +162,24 @@ func NewFirewallController(
 	fc.serviceLister = serviceInformer.Lister()
 
 	return fc
+}
+
+func wantsNodePort(service *v1.Service) bool {
+	return service.Spec.Type == v1.ServiceTypeNodePort
+}
+
+func needsUpdate(oldService, currService *v1.Service) bool {
+	return !cmp.Equal(oldService, currService)
+}
+
+// obj could be an *v1.Service, or a DeletionFinalStateUnknown marker item.
+func (fc *FirewallController) enqueueService(obj interface{}) {
+	key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
+	if err != nil {
+		runtime.HandleError(fmt.Errorf("couldn't get key for object %#v: %v", obj, err))
+		return
+	}
+	fc.queue.Add(key)
 }
 
 // Run starts the firewall controller loop.
