@@ -46,11 +46,7 @@ type serviceBuilder struct {
 	loadBalancerName   string
 }
 
-func newSvcBuilder() *serviceBuilder {
-	return newSvcBuilderWithIdx(1)
-}
-
-func newSvcBuilderWithIdx(idx int) *serviceBuilder {
+func newSvcBuilder(idx int) *serviceBuilder {
 	return &serviceBuilder{
 		idx: idx,
 	}
@@ -110,7 +106,7 @@ func lbName(idx int) string {
 }
 
 func createLBSvc(idx int) *corev1.Service {
-	return newSvcBuilderWithIdx(idx).setTypeLoadBalancer(true).build()
+	return newSvcBuilder(idx).setTypeLoadBalancer(true).build()
 }
 
 type recordingSyncer struct {
@@ -159,11 +155,7 @@ func TestResourcesController_Run(t *testing.T) {
 				return []godo.Droplet{{ID: 2, Name: "two"}}, newFakeOKResponse(), nil
 			},
 		},
-		&fakeLBService{
-			listFn: func(context.Context, *godo.ListOptions) ([]godo.LoadBalancer, *godo.Response, error) {
-				return []godo.LoadBalancer{{ID: "2", Name: "two"}}, newFakeOKResponse(), nil
-			},
-		},
+		newFakeLoadBalancerService(godo.LoadBalancer{ID: "2", Name: "two"}),
 		nil,
 	)
 	fakeResources := newResources(clusterID, "", publicAccessFirewall{}, gclient)
@@ -210,7 +202,7 @@ func TestResourcesController_SyncTags(t *testing.T) {
 		{
 			name: "service without LoadBalancer type",
 			services: []*corev1.Service{
-				newSvcBuilderWithIdx(1).setTypeLoadBalancer(false).build(),
+				newSvcBuilder(1).setTypeLoadBalancer(false).build(),
 			},
 			lbSvc: newFakeLoadBalancerService().
 				appendAction(newUnexpectedCallFailureAction(methodKindList)),
@@ -299,10 +291,11 @@ func TestResourcesController_SyncTags(t *testing.T) {
 		{
 			name: "found LB resource by ID annotation",
 			services: []*corev1.Service{
-				newSvcBuilderWithIdx(1).setTypeLoadBalancer(true).setLoadBalancerID("f7968b52-4ed9-4a16-af8b-304253f04e20").build(),
+				newSvcBuilder(1).setTypeLoadBalancer(true).setLoadBalancerID("f7968b52-4ed9-4a16-af8b-304253f04e20").build(),
 			},
 			lbSvc: newFakeLoadBalancerService(
 				godo.LoadBalancer{
+					ID:   "1",
 					Name: "renamed-lb",
 				},
 			),
@@ -323,11 +316,12 @@ func TestResourcesController_SyncTags(t *testing.T) {
 			services: []*corev1.Service{
 				newSvcBuilder(1).setTypeLoadBalancer(true).setLoadBalancerName("acme-prod").build(),
 			},
-			lbSvcListFn: func(context.Context, *godo.ListOptions) ([]godo.LoadBalancer, *godo.Response, error) {
-				return []godo.LoadBalancer{
-					{ID: "1", Name: "acme-prod"},
-				}, newFakeOKResponse(), nil
-			},
+			lbSvc: newFakeLoadBalancerService(
+				godo.LoadBalancer{
+					ID:   "1",
+					Name: "acme-prod",
+				},
+			),
 			tagSvc: newFakeTagsService(clusterIDTag),
 			tagRequests: []*godo.TagResourcesRequest{
 				{

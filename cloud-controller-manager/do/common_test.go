@@ -24,19 +24,17 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
-	"strconv"
 	"testing"
 
-	"github.com/mitchellh/copystructure"
-
 	"github.com/digitalocean/godo"
+	"github.com/mitchellh/copystructure"
 )
 
 func stringP(s string) *string {
 	return &s
 }
 
-func newFakeClient(fakeDroplet *fakeDropletService, fakeLB *fakeLBService, fakeCert *kvCertService) *godo.Client {
+func newFakeClient(fakeDroplet *fakeDropletService, lbService godo.LoadBalancersService, fakeCert *kvCertService) *godo.Client {
 	return &godo.Client{
 		Certificates:  fakeCert,
 		Droplets:      fakeDroplet,
@@ -139,22 +137,17 @@ func TestAllDropletList(t *testing.T) {
 }
 
 func TestAllLoadBalancerList(t *testing.T) {
-	client := newFakeLBClient(
-		&stubLBService{
-			listFn: func(ctx context.Context, opt *godo.ListOptions) ([]godo.LoadBalancer, *godo.Response, error) {
-				// Simulate pagination
-				lbs := []godo.LoadBalancer{
-					{ID: strconv.Itoa(opt.Page)},
-				}
-
-				resp := &godo.Response{
-					Links: linksForPage(opt.Page),
-				}
-
-				return lbs, resp, nil
-			},
+	client := newFakeLBClient(newFakeLoadBalancerService(
+		godo.LoadBalancer{
+			ID: "1",
 		},
-	)
+		godo.LoadBalancer{
+			ID: "2",
+		},
+		godo.LoadBalancer{
+			ID: "3",
+		},
+	))
 
 	lbs, err := allLoadBalancerList(context.Background(), client)
 	if err != nil {
@@ -162,7 +155,9 @@ func TestAllLoadBalancerList(t *testing.T) {
 	}
 
 	expectedLBs := []godo.LoadBalancer{
-		{ID: "1"}, {ID: "2"}, {ID: "3"},
+		{ID: "1", IP: "10.0.0.1", Status: "active"},
+		{ID: "2", IP: "10.0.0.1", Status: "active"},
+		{ID: "3", IP: "10.0.0.1", Status: "active"},
 	}
 	if want, got := expectedLBs, lbs; !reflect.DeepEqual(want, got) {
 		t.Errorf("incorrect lbs\nwant: %#v\n got: %#v", want, got)
