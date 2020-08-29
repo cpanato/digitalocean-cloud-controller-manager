@@ -107,8 +107,13 @@ github.com/minio/minio-go/pkg/encrypt
 github.com/minio/minio-go/pkg/s3signer
 github.com/minio/minio-go/pkg/s3utils
 github.com/minio/minio-go/pkg/set
+# github.com/mitchellh/copystructure v1.0.0
+## explicit
+github.com/mitchellh/copystructure
 # github.com/mitchellh/go-homedir v1.1.0
 github.com/mitchellh/go-homedir
+# github.com/mitchellh/reflectwalk v1.0.0
+github.com/mitchellh/reflectwalk
 # github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd
 github.com/modern-go/concurrent
 # github.com/modern-go/reflect2 v1.0.1
@@ -117,6 +122,9 @@ github.com/modern-go/reflect2
 github.com/munnerz/goautoneg
 # github.com/opencontainers/go-digest v1.0.0-rc1
 github.com/opencontainers/go-digest
+# github.com/pborman/uuid v1.2.0
+## explicit
+github.com/pborman/uuid
 # github.com/pkg/errors v0.8.1
 github.com/pkg/errors
 # github.com/prometheus/client_golang v1.7.1

@@ -12,6 +12,8 @@ require (
 	github.com/google/go-cmp v0.5.0
 	github.com/googleapis/gnostic v0.2.0 // indirect
 	github.com/minio/minio-go v6.0.10+incompatible
+	github.com/mitchellh/copystructure v1.0.0
+	github.com/pborman/uuid v1.2.0
 	github.com/prometheus/client_golang v1.7.1
 	github.com/spf13/pflag v1.0.5
 	github.com/tmc/grpc-websocket-proxy v0.0.0-20190109142713-0ad062ec5ee5 // indirect
